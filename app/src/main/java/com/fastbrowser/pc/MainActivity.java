@@ -376,8 +376,14 @@ public class MainActivity extends Activity {
         w.setWebChromeClient(new WebChromeClient(){
             @Override public boolean onCreateWindow(WebView view, boolean isDialog, boolean isUserGesture, Message resultMsg){
                 if(tabs.size() >= 20) return false;
-                addTab("about:blank");
-                WebView child=getWeb();
+                WebView child=new WebView(MainActivity.this);
+                configureWeb(child);
+                child.setSaveEnabled(true);
+                Tab tab=new Tab(child);
+                tab.lastUrl="about:blank";
+                tab.title="New Tab";
+                tabs.add(tab);
+                switchTab(tabs.size()-1);
                 WebView.WebViewTransport transport=(WebView.WebViewTransport)resultMsg.obj;
                 transport.setWebView(child);
                 resultMsg.sendToTarget();
@@ -594,19 +600,12 @@ public class MainActivity extends Activity {
 
         w.setWebViewClient(new WebViewClient(){
             @Override public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest r){
-                if(r==null||r.getUrl()==null) return false;
-                String scheme=r.getUrl().getScheme();
-                if(scheme==null || "http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme)) return false;
-                final android.net.Uri externalUri=r.getUrl();
-                final String external=externalUri.toString();
-                new AlertDialog.Builder(MainActivity.this)
-                        .setTitle("Open outside browser?")
-                        .setMessage(external)
-                        .setNegativeButton("Cancel",null)
-                        .setPositiveButton("Open",(d,w1)->{
-                            try{ startActivity(new Intent(Intent.ACTION_VIEW,externalUri)); }catch(Exception ex){ showMessage4("No app can open this link"); }
-                        }).show();
-                return true;
+                if(r==null || r.getUrl()==null) return false;
+                return handleNavigationRequest(v, r.getUrl(), r.isForMainFrame());
+            }
+            @Override public boolean shouldOverrideUrlLoading(WebView v, String url){
+                if(url==null || url.trim().isEmpty()) return false;
+                return handleNavigationRequest(v, android.net.Uri.parse(url), true);
             }
             @Override public void onLoadResource(WebView v, String u){ detector.inspect(u, v.getUrl(), "resource"); }
             @Override public WebResourceResponse shouldInterceptRequest(WebView v, WebResourceRequest req){
@@ -674,6 +673,27 @@ public class MainActivity extends Activity {
             return handleLongPress(w);
         });
         applyModesToWeb(w);
+    }
+
+    /** Keeps all normal web navigation inside this browser. Only non-web schemes can leave the app, and only after explicit user approval. */
+    private boolean handleNavigationRequest(WebView v, android.net.Uri uri, boolean mainFrame){
+        if(uri==null) return false;
+        String scheme=uri.getScheme();
+        if(scheme==null) return false;
+        if("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme)){
+            // WebView handles the navigation itself; never launch an external browser for web pages.
+            return false;
+        }
+        final android.net.Uri externalUri=uri;
+        final String external=externalUri.toString();
+        new AlertDialog.Builder(MainActivity.this)
+                .setTitle("Open outside browser?")
+                .setMessage(external)
+                .setNegativeButton("Cancel",null)
+                .setPositiveButton("Open",(d,w1)->{
+                    try{ startActivity(new Intent(Intent.ACTION_VIEW,externalUri)); }catch(Exception ex){ showMessage4("No app can open this link"); }
+                }).show();
+        return true;
     }
 
     private String getWebSafeUrl(){ return tabs.isEmpty() ? "" : tabs.get(currentTab).lastUrl; }
@@ -744,7 +764,11 @@ public class MainActivity extends Activity {
             if(q.contains(".")&&!q.contains(" ")) q="https://"+q;
             else q=activeEngine.searchUrl.replace("%s",Uri.encode(q));
         }
-        detector.clear(); getWeb().loadUrl(q); tabs.get(currentTab).lastUrl=q;
+        detector.clear();
+        WebView target=getWeb();
+        target.stopLoading();
+        target.loadUrl(q);
+        tabs.get(currentTab).lastUrl=q;
     }
 
     private void loadHome(WebView v){
