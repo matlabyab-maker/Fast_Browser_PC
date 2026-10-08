@@ -1137,9 +1137,7 @@ public class MainActivity extends Activity {
                 if(text!=null) v=text;
             }catch(Exception ignored){}
         }
-        v=v.replace("\\\\","\\").replace("\\\"","\"");
-                .replace("\\n","\n").replace("\\r","\r").replace("\\t","\t")
-                .replace("\\/","/");
+        v=v.replace("\\/","/");
         java.util.regex.Matcher m=java.util.regex.Pattern.compile("\\\\u([0-9a-fA-F]{4})").matcher(v);
         StringBuffer out=new StringBuffer();
         while(m.find()){
