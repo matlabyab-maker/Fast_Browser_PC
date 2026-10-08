@@ -597,13 +597,14 @@ public class MainActivity extends Activity {
                 if(r==null||r.getUrl()==null) return false;
                 String scheme=r.getUrl().getScheme();
                 if(scheme==null || "http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme)) return false;
-                final String external=u.toString();
+                final android.net.Uri externalUri=r.getUrl();
+                final String external=externalUri.toString();
                 new AlertDialog.Builder(MainActivity.this)
                         .setTitle("Open outside browser?")
                         .setMessage(external)
                         .setNegativeButton("Cancel",null)
                         .setPositiveButton("Open",(d,w1)->{
-                            try{ startActivity(new Intent(Intent.ACTION_VIEW,u)); }catch(Exception ex){ showMessage4("No app can open this link"); }
+                            try{ startActivity(new Intent(Intent.ACTION_VIEW,externalUri)); }catch(Exception ex){ showMessage4("No app can open this link"); }
                         }).show();
                 return true;
             }
