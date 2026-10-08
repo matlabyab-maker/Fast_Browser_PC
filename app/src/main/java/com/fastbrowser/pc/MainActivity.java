@@ -409,6 +409,7 @@ public class MainActivity extends Activity {
                 getWindow().getDecorView().setSystemUiVisibility(0);
             }
         });
+    }
 
     /** Adds a small, semi-transparent, draggable exit control over fullscreen media. */
     private void showFullscreenExitButton() {
