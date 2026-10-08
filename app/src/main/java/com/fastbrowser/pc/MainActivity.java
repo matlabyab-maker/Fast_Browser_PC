@@ -20,6 +20,8 @@ import java.io.OutputStream;
 import java.io.ByteArrayInputStream;
 import java.text.SimpleDateFormat;
 import android.speech.RecognizerIntent;
+import android.speech.SpeechRecognizer;
+import android.speech.RecognitionListener;
 import android.Manifest;
 import android.content.pm.PackageManager;
 import androidx.webkit.WebSettingsCompat;
@@ -67,6 +69,7 @@ public class MainActivity extends Activity {
     private boolean noImagesMode = false;
     private boolean adBlockEnabled = false;
     private boolean incognitoMode = false;
+    private SpeechRecognizer speechRecognizer;
 
     private static class Engine {
         String name, icon, searchUrl;
@@ -163,12 +166,38 @@ public class MainActivity extends Activity {
     }
 
     private void startVoiceSearch(){
-        try {
-            Intent i=new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
-            i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
-            i.putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak your search");
-            startActivityForResult(i, REQ_VOICE_SEARCH);
-        } catch(Exception e){ showMessage4("Voice search is not available"); }
+        // Voice recognition stays in the browser Activity; no external speech UI is launched.
+        if(!SpeechRecognizer.isRecognitionAvailable(this)){ showMessage4("Voice search is not available"); return; }
+        if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){
+            requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, REQ_WEB_PERMISSIONS + 10);
+            showMessage4("Microphone permission is required");
+            return;
+        }
+        if(speechRecognizer!=null){ try{speechRecognizer.destroy();}catch(Exception ignored){} }
+        speechRecognizer=SpeechRecognizer.createSpeechRecognizer(this);
+        speechRecognizer.setRecognitionListener(new RecognitionListener(){
+            @Override public void onReadyForSpeech(Bundle params){ showMessage4("Listening…"); }
+            @Override public void onBeginningOfSpeech(){}
+            @Override public void onRmsChanged(float rmsdB){}
+            @Override public void onBufferReceived(byte[] buffer){}
+            @Override public void onEndOfSpeech(){}
+            @Override public void onPartialResults(Bundle partialResults){}
+            @Override public void onEvent(int eventType, Bundle params){}
+            @Override public void onError(int error){ showMessage4("Voice search was not recognized"); stopVoiceRecognizer(); }
+            @Override public void onResults(Bundle results){
+                ArrayList<String> r=results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
+                if(r!=null&&!r.isEmpty()){ url.setText(r.get(0)); load(r.get(0)); }
+                stopVoiceRecognizer();
+            }
+        });
+        Intent i=new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+        i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+        i.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS,false);
+        speechRecognizer.startListening(i);
+    }
+
+    private void stopVoiceRecognizer(){
+        if(speechRecognizer!=null){ try{speechRecognizer.stopListening();}catch(Exception ignored){} try{speechRecognizer.destroy();}catch(Exception ignored){} speechRecognizer=null; }
     }
 
     private void startImageSearch(){
@@ -197,8 +226,14 @@ public class MainActivity extends Activity {
         if(requestCode==REQ_IMAGE_SEARCH){
             if(resultCode==RESULT_OK && data!=null && data.getData()!=null){
                 Uri image=data.getData();
-                Intent share=new Intent(Intent.ACTION_SEND); share.setType("image/*"); share.putExtra(Intent.EXTRA_STREAM,image); share.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                try{ startActivity(Intent.createChooser(share,"Search this image with")); }catch(Exception e){showMessage4("No image-search app is available");}
+                // Image selection may use Android's picker, but the search itself stays in this WebView.
+                String u=image.toString().replace("\\","\\\\").replace("'","\\'");
+                String html="<html><body style='font-family:sans-serif;padding:18px;background:#fff8d8;text-align:center'>"+
+                        "<h3>Image search</h3><p>Image selected. Search is performed inside Fast_Browser_PC.</p>"+
+                        "<img src='"+u+"' style='max-width:90%;max-height:55vh'><br><br>"+
+                        "<button onclick=\"location.href='https://lens.google.com/'\">Search image in browser</button>"+
+                        "</body></html>";
+                getWeb().loadDataWithBaseURL("https://fastbrowser.local/image-search/",html,"text/html","UTF-8",null);
             }
             return;
         }
@@ -558,7 +593,20 @@ public class MainActivity extends Activity {
         handler.postDelayed(highTrafficMonitor, 500L);
 
         w.setWebViewClient(new WebViewClient(){
-            @Override public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest r){ return false; }
+            @Override public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest r){
+                if(r==null||r.getUrl()==null) return false;
+                String scheme=r.getUrl().getScheme();
+                if(scheme==null || "http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme)) return false;
+                final String external=u.toString();
+                new AlertDialog.Builder(MainActivity.this)
+                        .setTitle("Open outside browser?")
+                        .setMessage(external)
+                        .setNegativeButton("Cancel",null)
+                        .setPositiveButton("Open",(d,w1)->{
+                            try{ startActivity(new Intent(Intent.ACTION_VIEW,u)); }catch(Exception ex){ showMessage4("No app can open this link"); }
+                        }).show();
+                return true;
+            }
             @Override public void onLoadResource(WebView v, String u){ detector.inspect(u, v.getUrl(), "resource"); }
             @Override public WebResourceResponse shouldInterceptRequest(WebView v, WebResourceRequest req){
                 String u=req==null||req.getUrl()==null?"":req.getUrl().toString();
@@ -881,6 +929,13 @@ public class MainActivity extends Activity {
         root.addView(zoom);
         root.addView(close);
 
+        // Small transparent handles use the reference image's corner areas.
+        // Drag handle moves the whole mouse window; resize handle changes its size.
+        final View moveHandle = transparentZone();
+        final View resizeHandle = transparentZone();
+        root.addView(moveHandle);
+        root.addView(resizeHandle);
+
         Runnable layoutZones = () -> {
             int rw=root.getWidth(), rh=root.getHeight();
             if(rw<=0 || rh<=0) return;
@@ -890,8 +945,46 @@ public class MainActivity extends Activity {
             setMouseZoneLayout(drag,126,211,128,79,sx,sy);
             setMouseZoneLayout(zoom,254,211,84,79,sx,sy);
             setMouseZoneLayout(close,338,211,92,79,sx,sy);
+            setMouseZoneLayout(moveHandle,0,0,38,38,sx,sy);
+            setMouseZoneLayout(resizeHandle,392,0,38,38,sx,sy);
         };
         root.addOnLayoutChangeListener((v,l,t,r,b,ol,ot,or,ob)->layoutZones.run());
+
+        moveHandle.setOnTouchListener(new View.OnTouchListener(){
+            float downX,downY; int startX,startY;
+            @Override public boolean onTouch(View v, MotionEvent e){
+                Window ww=d.getWindow(); if(ww==null) return true;
+                WindowManager.LayoutParams lp=ww.getAttributes();
+                switch(e.getActionMasked()){
+                    case MotionEvent.ACTION_DOWN:
+                        downX=e.getRawX(); downY=e.getRawY(); startX=lp.x; startY=lp.y; return true;
+                    case MotionEvent.ACTION_MOVE:
+                        lp.x=startX+Math.round(e.getRawX()-downX);
+                        lp.y=startY+Math.round(e.getRawY()-downY);
+                        ww.setAttributes(lp); return true;
+                    default: return true;
+                }
+            }
+        });
+
+        resizeHandle.setOnTouchListener(new View.OnTouchListener(){
+            float downX,downY; int startW,startH;
+            @Override public boolean onTouch(View v, MotionEvent e){
+                Window ww=d.getWindow(); if(ww==null) return true;
+                WindowManager.LayoutParams lp=ww.getAttributes();
+                switch(e.getActionMasked()){
+                    case MotionEvent.ACTION_DOWN:
+                        downX=e.getRawX(); downY=e.getRawY(); startW=root.getWidth(); startH=root.getHeight(); return true;
+                    case MotionEvent.ACTION_MOVE:
+                        DisplayMetrics dm=getResources().getDisplayMetrics();
+                        int maxW=(int)(dm.widthPixels*0.95f);
+                        int newW=Math.max(dp(250),Math.min(maxW,startW+Math.round(e.getRawX()-downX)));
+                        int newH=Math.round(newW*(290f/430f));
+                        ww.setLayout(newW,newH); return true;
+                    default: return true;
+                }
+            }
+        });
 
         touchpad.setOnTouchListener(new View.OnTouchListener(){
             float lx,ly;
@@ -967,6 +1060,10 @@ public class MainActivity extends Activity {
             DisplayMetrics dm=getResources().getDisplayMetrics();
             int width=Math.min((int)(dm.widthPixels*0.92f), dp(430));
             int height=Math.round(width*(290f/430f));
+            lp.gravity=Gravity.TOP|Gravity.LEFT;
+            lp.x=Math.max(0,(dm.widthPixels-width)/2);
+            lp.y=Math.max(0,(dm.heightPixels-height)/3);
+            w.setAttributes(lp);
             w.setLayout(width,height);
         }
         mouseDialog=d;
@@ -1063,12 +1160,19 @@ public class MainActivity extends Activity {
 
     private void zoomAtPointer(float dy){
         WebView w=getWeb();
-        if(w==null) return;
-        int delta=dy<0?1:-1;
+        if(w==null || w.getWidth()<=0 || w.getHeight()<=0) return;
         if(Build.VERSION.SDK_INT>=21){
-            if(delta>0) w.zoomIn(); else w.zoomOut();
+            float oldScale=w.getScale();
+            int px=(int)(mouseX*w.getWidth()), py=(int)(mouseY*w.getHeight());
+            int sx=w.getScrollX(), sy=w.getScrollY();
+            w.zoomBy(dy<0 ? 1.18f : 0.85f);
+            w.postDelayed(()->{
+                float ns=w.getScale();
+                if(oldScale<=0 || ns<=0) return;
+                float ratio=ns/oldScale;
+                w.scrollTo(Math.max(0,Math.round((sx+px)*ratio-px)), Math.max(0,Math.round((sy+py)*ratio-py)));
+            },80);
         }
-        updateMouseCursor();
     }
 
     /** Saves the currently visible browser page as a good-quality JPEG screenshot. */
