@@ -1121,20 +1121,41 @@ public class MainActivity extends Activity {
 
     private String decodeJavascriptString(String value){
         if(value==null) return "";
-        String v=value;
-        if(v.length()>=2 && v.charAt(0)=='"' && v.charAt(v.length()-1)=='"'){
-            v=v.substring(1,v.length()-1);
-            v=v.replace("\\\\","\\").replace("\\\"","\"")
-                    .replace("\\n","\n").replace("\\r","\r").replace("\\t","\t")
-                    .replace("\\/","/");
-            // WebView uses JSON-style unicode escapes.
-            java.util.regex.Matcher m=java.util.regex.Pattern.compile("\\\\u([0-9a-fA-F]{4})").matcher(v);
-            StringBuffer out=new StringBuffer();
-            while(m.find()) m.appendReplacement(out,java.util.regex.Matcher.quoteReplacement(String.valueOf((char)Integer.parseInt(m.group(1),16))));
-            m.appendTail(out);
-            v=out.toString();
+        String v=value.trim();
+        // evaluateJavascript normally returns a JSON string.
+        if(v.length()>=2 && v.charAt(0)=='"'){
+            try{
+                Object parsed=new org.json.JSONTokener(v).nextValue();
+                if(parsed instanceof String) v=(String)parsed;
+            }catch(Exception ignored){}
         }
-        return v;
+        // Some page scripts return an object containing a text field.
+        if(v.startsWith("{")){
+            try{
+                org.json.JSONObject o=new org.json.JSONObject(v);
+                String text=o.optString("text", null);
+                if(text!=null) v=text;
+            }catch(Exception ignored){}
+        }
+        v=v.replace("\\\\","\\").replace("\\\"","\"");
+                .replace("\\n","\n").replace("\\r","\r").replace("\\t","\t")
+                .replace("\\/","/");
+        java.util.regex.Matcher m=java.util.regex.Pattern.compile("\\\\u([0-9a-fA-F]{4})").matcher(v);
+        StringBuffer out=new StringBuffer();
+        while(m.find()){
+            m.appendReplacement(out, java.util.regex.Matcher.quoteReplacement(
+                    String.valueOf((char)Integer.parseInt(m.group(1),16))));
+        }
+        m.appendTail(out);
+        return out.toString().trim();
+    }
+
+    /** Shows a temporary browser message and hides it automatically after 4 seconds. */
+    private void showMessage4(String message){
+        if(isFinishing() || (android.os.Build.VERSION.SDK_INT >= 17 && isDestroyed())) return;
+        final android.widget.Toast toast = android.widget.Toast.makeText(this, message == null ? "" : message, android.widget.Toast.LENGTH_LONG);
+        toast.show();
+        new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(toast::cancel, 4000L);
     }
 
     private String escapeXml(String s){
@@ -2140,18 +2161,7 @@ public class MainActivity extends Activity {
         });
     }
 
-    private String decodeJavascriptString(String value){
-        if(value==null) return "";
-        try{
-            org.json.JSONObject o=new org.json.JSONObject(value);
-            return o.optString("text","").trim();
-        }catch(Exception ignored){}
-        // Older WebView versions can return a JSON string rather than an object.
-        if(value.length()>=2 && value.startsWith("\\\"") && value.endsWith("\\\"")){
-            try{return new org.json.JSONTokener(value).nextValue().toString().trim();}catch(Exception ignored){}
-        }
-        return value.trim();
-    }
+    
     private void showTextSize(){ final String[] a={"75%","90%","100%","110%","125%","150%"}; new AlertDialog.Builder(this).setTitle("Text Size").setItems(a,(d,w)->getWeb().getSettings().setTextZoom(Integer.parseInt(a[w].replace("%","")))).show(); }
 
     private void startDownload(String u,String ua,String cd,String mime){
