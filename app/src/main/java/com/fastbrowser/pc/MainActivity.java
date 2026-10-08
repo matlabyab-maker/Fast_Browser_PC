@@ -930,12 +930,12 @@ public class MainActivity extends Activity {
         root.addView(zoom);
         root.addView(close);
 
-        // Small transparent handles use the reference image's corner areas.
-        // Drag handle moves the whole mouse window; resize handle changes its size.
-        final View moveHandle = transparentZone();
-        final View resizeHandle = transparentZone();
-        root.addView(moveHandle);
-        root.addView(resizeHandle);
+        // Two transparent resize handles sit on the two upper corners of the reference image.
+        // The yellow Drag button itself is the window-move handle.
+        final View resizeLeftHandle = transparentZone();
+        final View resizeRightHandle = transparentZone();
+        root.addView(resizeLeftHandle);
+        root.addView(resizeRightHandle);
 
         Runnable layoutZones = () -> {
             int rw=root.getWidth(), rh=root.getHeight();
@@ -946,46 +946,81 @@ public class MainActivity extends Activity {
             setMouseZoneLayout(drag,126,211,128,79,sx,sy);
             setMouseZoneLayout(zoom,254,211,84,79,sx,sy);
             setMouseZoneLayout(close,338,211,92,79,sx,sy);
-            setMouseZoneLayout(moveHandle,0,0,38,38,sx,sy);
-            setMouseZoneLayout(resizeHandle,392,0,38,38,sx,sy);
+            setMouseZoneLayout(resizeLeftHandle,0,0,38,38,sx,sy);
+            setMouseZoneLayout(resizeRightHandle,392,0,38,38,sx,sy);
         };
         root.addOnLayoutChangeListener((v,l,t,r,b,ol,ot,or,ob)->layoutZones.run());
 
-        moveHandle.setOnTouchListener(new View.OnTouchListener(){
+        // Yellow Drag button: press and drag it to move the entire mouse window.
+        drag.setOnTouchListener(new View.OnTouchListener(){
             float downX,downY; int startX,startY;
             @Override public boolean onTouch(View v, MotionEvent e){
                 Window ww=d.getWindow(); if(ww==null) return true;
                 WindowManager.LayoutParams lp=ww.getAttributes();
                 switch(e.getActionMasked()){
                     case MotionEvent.ACTION_DOWN:
-                        downX=e.getRawX(); downY=e.getRawY(); startX=lp.x; startY=lp.y; return true;
+                        downX=e.getRawX(); downY=e.getRawY(); startX=lp.x; startY=lp.y;
+                        return true;
                     case MotionEvent.ACTION_MOVE:
                         lp.x=startX+Math.round(e.getRawX()-downX);
                         lp.y=startY+Math.round(e.getRawY()-downY);
-                        ww.setAttributes(lp); return true;
+                        ww.setAttributes(lp);
+                        return true;
+                    case MotionEvent.ACTION_UP:
+                    case MotionEvent.ACTION_CANCEL:
+                        return true;
                     default: return true;
                 }
             }
         });
 
-        resizeHandle.setOnTouchListener(new View.OnTouchListener(){
-            float downX,downY; int startW,startH;
+        // Both upper corners resize the window. Left corner keeps the right edge fixed;
+        // right corner keeps the left edge fixed. The image remains at its 430:290 ratio.
+        View.OnTouchListener leftResizeListener = new View.OnTouchListener(){
+            float downX; int startW,startX;
             @Override public boolean onTouch(View v, MotionEvent e){
                 Window ww=d.getWindow(); if(ww==null) return true;
                 WindowManager.LayoutParams lp=ww.getAttributes();
                 switch(e.getActionMasked()){
                     case MotionEvent.ACTION_DOWN:
-                        downX=e.getRawX(); downY=e.getRawY(); startW=root.getWidth(); startH=root.getHeight(); return true;
-                    case MotionEvent.ACTION_MOVE:
+                        downX=e.getRawX(); startW=root.getWidth(); startX=lp.x; return true;
+                    case MotionEvent.ACTION_MOVE:{
+                        DisplayMetrics dm=getResources().getDisplayMetrics();
+                        int maxW=(int)(dm.widthPixels*0.95f);
+                        int delta=Math.round(e.getRawX()-downX);
+                        int newW=Math.max(dp(250),Math.min(maxW,startW-delta));
+                        int newH=Math.round(newW*(290f/430f));
+                        lp.x=startX+delta;
+                        ww.setAttributes(lp);
+                        ww.setLayout(newW,newH);
+                        return true;
+                    }
+                    default: return true;
+                }
+            }
+        };
+        View.OnTouchListener rightResizeListener = new View.OnTouchListener(){
+            float downX; int startW;
+            @Override public boolean onTouch(View v, MotionEvent e){
+                Window ww=d.getWindow(); if(ww==null) return true;
+                WindowManager.LayoutParams lp=ww.getAttributes();
+                switch(e.getActionMasked()){
+                    case MotionEvent.ACTION_DOWN:
+                        downX=e.getRawX(); startW=root.getWidth(); return true;
+                    case MotionEvent.ACTION_MOVE:{
                         DisplayMetrics dm=getResources().getDisplayMetrics();
                         int maxW=(int)(dm.widthPixels*0.95f);
                         int newW=Math.max(dp(250),Math.min(maxW,startW+Math.round(e.getRawX()-downX)));
                         int newH=Math.round(newW*(290f/430f));
-                        ww.setLayout(newW,newH); return true;
+                        ww.setLayout(newW,newH);
+                        return true;
+                    }
                     default: return true;
                 }
             }
-        });
+        };
+        resizeLeftHandle.setOnTouchListener(leftResizeListener);
+        resizeRightHandle.setOnTouchListener(rightResizeListener);
 
         touchpad.setOnTouchListener(new View.OnTouchListener(){
             float lx,ly;
@@ -1001,10 +1036,7 @@ public class MainActivity extends Activity {
                             if(Math.abs(dy)>0.5f) zoomAtPointer(dy);
                         }else{
                             moveMousePointer(dx,dy,v.getWidth(),v.getHeight());
-                            if(mouseDragMode){
-                                if(!mouseDragging){ dispatchMouseEvent("mousedown"); mouseDragging=true; }
-                                dispatchMouseEvent("mousemove");
-                            }
+                            if(mouseDragging){ dispatchMouseMoveSmooth(); }
                         }
                         return true;
                     case MotionEvent.ACTION_UP:
@@ -1016,17 +1048,12 @@ public class MainActivity extends Activity {
             }
         });
 
-        left.setOnClickListener(v -> {
-            if(mouseDragging){ dispatchMouseEvent("mouseup"); mouseDragging=false; }
-            dispatchMouseEvent("mousedown");
-            dispatchMouseEvent("mouseup");
-            dispatchMouseEvent("click");
-        });
-        drag.setOnClickListener(v -> {
-            mouseDragMode=!mouseDragMode;
-            drag.setSelected(mouseDragMode);
-            if(!mouseDragMode && mouseDragging){ dispatchMouseEvent("mouseup"); mouseDragging=false; }
-            showMessage4(mouseDragMode ? "Drag mode ON" : "Drag mode OFF");
+        left.setOnTouchListener((v,e)->{
+            if(e.getActionMasked()==MotionEvent.ACTION_UP){
+                if(mouseDragging){ dispatchMouseEvent("mouseup"); mouseDragging=false; }
+                dispatchMouseClick();
+            }
+            return true;
         });
         zoom.setOnClickListener(v -> {
             mouseZoomMode=!mouseZoomMode;
@@ -1144,13 +1171,44 @@ public class MainActivity extends Activity {
         updateMouseCursor();
     }
 
+    private boolean mouseMovePending=false;
+    private void dispatchMouseMoveSmooth(){
+        if(mouseMovePending) return;
+        mouseMovePending=true;
+        if(mouseCursor!=null) mouseCursor.postOnAnimation(()->{
+            mouseMovePending=false;
+            dispatchMouseEvent("mousemove");
+        });
+    }
+
+    private void dispatchMouseClick(){
+        WebView w=getWeb();
+        if(w==null || w.getWidth()<=0 || w.getHeight()<=0) return;
+        final float nx=mouseX, ny=mouseY;
+        String js="(function(){try{"+
+                "var vw=Math.max(1,window.innerWidth),vh=Math.max(1,window.innerHeight);"+
+                "var x=Math.max(0,Math.min(vw-1,"+(nx)+"*vw));"+
+                "var y=Math.max(0,Math.min(vh-1,"+(ny)+"*vh));"+
+                "var el=document.elementFromPoint(x,y);"+
+                "if(!el)return false;"+
+                "['pointerdown','mousedown','pointerup','mouseup'].forEach(function(t){"+
+                "var isUp=(t==='pointerup'||t==='mouseup'||t==='click');"+
+                "var ev;if(t.indexOf('pointer')===0){ev=new PointerEvent(t,{bubbles:true,cancelable:true,clientX:x,clientY:y,button:0,buttons:isUp?0:1,pointerId:1,pointerType:'mouse'});}"+
+                "else{ev=new MouseEvent(t,{bubbles:true,cancelable:true,view:window,clientX:x,clientY:y,button:0,buttons:isUp?0:1});}"+
+                "el.dispatchEvent(ev);});"+
+                "if(typeof el.click==='function')el.click(); return true;"+
+                "}catch(e){return false;}})()";
+        w.evaluateJavascript(js,null);
+    }
+
     private void dispatchMouseEvent(String type){
         WebView w=getWeb();
         if(w==null) return;
-        final int x=Math.max(0,Math.min(w.getWidth()-1,(int)(mouseX*w.getWidth())));
-        final int y=Math.max(0,Math.min(w.getHeight()-1,(int)(mouseY*w.getHeight())));
+        final float nx=mouseX, ny=mouseY;
         String js="(function(){try{"+
-                "var x="+x+",y="+y+",el=document.elementFromPoint(x,y);"+
+                "var x=Math.max(0,Math.min(window.innerWidth-1,"+nx+"*window.innerWidth));"+
+                "var y=Math.max(0,Math.min(window.innerHeight-1,"+ny+"*window.innerHeight));"+
+                "var el=document.elementFromPoint(x,y);"+
                 "if(!el)return false;"+
                 "var ev=new MouseEvent('"+type+"',{bubbles:true,cancelable:true,view:window,clientX:x,clientY:y,button:0,buttons:"+(type.equals("mouseup")||type.equals("click")?0:1)+"});"+
                 "el.dispatchEvent(ev);"+
