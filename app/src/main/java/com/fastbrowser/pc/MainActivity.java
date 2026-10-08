@@ -854,105 +854,141 @@ public class MainActivity extends Activity {
 
         final Dialog d = new Dialog(this);
         d.requestWindowFeature(Window.FEATURE_NO_TITLE);
-        FrameLayout root = new FrameLayout(this);
-        ImageView image = new ImageView(this);
+
+        final FrameLayout root = new FrameLayout(this);
+        root.setClipChildren(true);
+
+        final ImageView image = new ImageView(this);
         image.setImageResource(R.drawable.mouse_window);
         image.setScaleType(ImageView.ScaleType.FIT_XY);
+        image.setClickable(false);
+        image.setFocusable(false);
         root.addView(image, new FrameLayout.LayoutParams(-1,-1));
 
-        // The reference image is 430x290. These transparent overlays follow
-        // its original button boundaries.
-        View touchpad = new View(this);
+        // The upper part of the reference image is the mouse pad.
+        final View touchpad = new View(this);
         touchpad.setBackgroundColor(Color.TRANSPARENT);
-        FrameLayout.LayoutParams tp = new FrameLayout.LayoutParams(-1,0);
-        tp.height = 211;
-        tp.gravity = Gravity.TOP;
-        root.addView(touchpad,tp);
+        touchpad.setClickable(true);
+        touchpad.setFocusable(false);
+        root.addView(touchpad, new FrameLayout.LayoutParams(-1,0));
 
         final TextView left = transparentZone();
         final TextView drag = transparentZone();
         final TextView zoom = transparentZone();
         final TextView close = transparentZone();
-        addMouseZone(root,left,0,211,126,79);
-        addMouseZone(root,drag,126,211,128,79);
-        addMouseZone(root,zoom,254,211,84,79);
-        addMouseZone(root,close,338,211,92,79);
+        root.addView(left);
+        root.addView(drag);
+        root.addView(zoom);
+        root.addView(close);
+
+        Runnable layoutZones = () -> {
+            int rw=root.getWidth(), rh=root.getHeight();
+            if(rw<=0 || rh<=0) return;
+            float sx=rw/430f, sy=rh/290f;
+            setMouseZoneLayout(touchpad,0,0,430,211,sx,sy);
+            setMouseZoneLayout(left,0,211,126,79,sx,sy);
+            setMouseZoneLayout(drag,126,211,128,79,sx,sy);
+            setMouseZoneLayout(zoom,254,211,84,79,sx,sy);
+            setMouseZoneLayout(close,338,211,92,79,sx,sy);
+        };
+        root.addOnLayoutChangeListener((v,l,t,r,b,ol,ot,or,ob)->layoutZones.run());
 
         touchpad.setOnTouchListener(new View.OnTouchListener(){
             float lx,ly;
             @Override public boolean onTouch(View v, MotionEvent e){
-                if(e.getAction()==MotionEvent.ACTION_DOWN){
-                    lx=e.getX(); ly=e.getY();
-                    return true;
-                }
-                if(e.getAction()==MotionEvent.ACTION_MOVE){
-                    float dx=e.getX()-lx, dy=e.getY()-ly;
-                    lx=e.getX(); ly=e.getY();
-                    if(mouseZoomMode){
-                        if(Math.abs(dy)>0.5f) zoomAtPointer(dy);
-                    }else{
-                        moveMousePointer(dx,dy,v.getWidth(),v.getHeight());
-                        if(mouseDragMode){
-                            if(!mouseDragging){ dispatchMouseEvent("mousedown"); mouseDragging=true; }
-                            dispatchMouseEvent("mousemove");
+                switch(e.getActionMasked()){
+                    case MotionEvent.ACTION_DOWN:
+                        lx=e.getX(); ly=e.getY();
+                        return true;
+                    case MotionEvent.ACTION_MOVE:
+                        float dx=e.getX()-lx, dy=e.getY()-ly;
+                        lx=e.getX(); ly=e.getY();
+                        if(mouseZoomMode){
+                            if(Math.abs(dy)>0.5f) zoomAtPointer(dy);
+                        }else{
+                            moveMousePointer(dx,dy,v.getWidth(),v.getHeight());
+                            if(mouseDragMode){
+                                if(!mouseDragging){ dispatchMouseEvent("mousedown"); mouseDragging=true; }
+                                dispatchMouseEvent("mousemove");
+                            }
                         }
-                    }
-                    return true;
+                        return true;
+                    case MotionEvent.ACTION_UP:
+                    case MotionEvent.ACTION_CANCEL:
+                        if(mouseDragging){ dispatchMouseEvent("mouseup"); mouseDragging=false; }
+                        return true;
+                    default: return true;
                 }
-                if(e.getAction()==MotionEvent.ACTION_UP || e.getAction()==MotionEvent.ACTION_CANCEL){
-                    if(mouseDragging){ dispatchMouseEvent("mouseup"); mouseDragging=false; }
-                    return true;
-                }
-                return true;
             }
         });
 
-        left.setOnClickListener(v->{
+        left.setOnClickListener(v -> {
             if(mouseDragging){ dispatchMouseEvent("mouseup"); mouseDragging=false; }
             dispatchMouseEvent("mousedown");
             dispatchMouseEvent("mouseup");
             dispatchMouseEvent("click");
         });
-        drag.setOnClickListener(v->{
+        drag.setOnClickListener(v -> {
             mouseDragMode=!mouseDragMode;
             drag.setSelected(mouseDragMode);
             if(!mouseDragMode && mouseDragging){ dispatchMouseEvent("mouseup"); mouseDragging=false; }
-            showMessage4( mouseDragMode?"Drag mode ON":"Drag mode OFF");
+            showMessage4(mouseDragMode ? "Drag mode ON" : "Drag mode OFF");
         });
-        zoom.setOnClickListener(v->{
+        zoom.setOnClickListener(v -> {
             mouseZoomMode=!mouseZoomMode;
             zoom.setSelected(mouseZoomMode);
-            showMessage4( mouseZoomMode?"Point Zoom ON":"Point Zoom OFF");
+            showMessage4(mouseZoomMode ? "Point Zoom ON" : "Point Zoom OFF");
         });
-        close.setOnClickListener(v->{
+        close.setOnClickListener(v -> {
             if(mouseDragging){ dispatchMouseEvent("mouseup"); mouseDragging=false; }
-            mouseDragMode=false; mouseZoomMode=false;
+            mouseDragMode=false;
+            mouseZoomMode=false;
             if(mouseCursor!=null) mouseCursor.setVisibility(View.GONE);
             d.dismiss();
         });
 
         d.setContentView(root);
-        d.setOnDismissListener(x->{mouseDialog=null; mouseDragging=false; mouseDragMode=false; mouseZoomMode=false;});
+        d.setOnDismissListener(x->{
+            mouseDialog=null;
+            mouseDragging=false;
+            mouseDragMode=false;
+            mouseZoomMode=false;
+            if(mouseCursor!=null) mouseCursor.setVisibility(View.GONE);
+        });
+
+        d.show();
         Window w=d.getWindow();
         if(w!=null){
             w.setBackgroundDrawableResource(android.R.color.transparent);
             w.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
             WindowManager.LayoutParams lp=w.getAttributes();
-            lp.dimAmount=0.25f; w.setAttributes(lp);
-        }
-        mouseDialog=d;
-        d.show();
-        w=d.getWindow();
-        if(w!=null){
+            lp.dimAmount=0.25f;
+            w.setAttributes(lp);
             DisplayMetrics dm=getResources().getDisplayMetrics();
-            int width=(int)(dm.widthPixels*0.92f);
-            int height=(int)(width*(290f/430f));
+            int width=Math.min((int)(dm.widthPixels*0.92f), dp(430));
+            int height=Math.round(width*(290f/430f));
             w.setLayout(width,height);
         }
-        // Cursor is a small overlay on the actual webpage, not another image.
-        ensureMouseCursor();
-        mouseCursor.setVisibility(View.VISIBLE);
-        updateMouseCursor();
+        mouseDialog=d;
+        root.post(() -> {
+            layoutZones.run();
+            ensureMouseCursor();
+            mouseCursor.setVisibility(View.VISIBLE);
+            updateMouseCursor();
+        });
+    }
+
+    private int dp(int value){
+        return Math.round(value * getResources().getDisplayMetrics().density);
+    }
+
+    private void setMouseZoneLayout(View v,int x,int y,int width,int height,float sx,float sy){
+        FrameLayout.LayoutParams lp=(FrameLayout.LayoutParams)v.getLayoutParams();
+        lp.leftMargin=Math.round(x*sx);
+        lp.topMargin=Math.round(y*sy);
+        lp.width=Math.max(1,Math.round(width*sx));
+        lp.height=Math.max(1,Math.round(height*sy));
+        v.setLayoutParams(lp);
     }
 
     private TextView transparentZone(){
