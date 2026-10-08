@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="match_parent"
+    android:orientation="vertical" android:background="#FFF8D8">
+
+    <FrameLayout android:id="@+id/webContainer" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1"/>
+
+    <!-- Everything stays at the bottom, as required by the Fast_Browser_PC layout. -->
+    <HorizontalScrollView android:id="@+id/tabScroll" android:layout_width="match_parent" android:layout_height="22dp"
+        android:fillViewport="false" android:scrollbars="none" android:background="#F4E9B8">
+        <LinearLayout android:id="@+id/tabs" android:layout_width="wrap_content" android:layout_height="match_parent"
+            android:orientation="horizontal" android:gravity="center_vertical"/>
+    </HorizontalScrollView>
+
+    <LinearLayout android:id="@+id/addressBar" android:layout_width="match_parent" android:layout_height="36dp"
+        android:orientation="horizontal" android:background="#F9EFC7" android:gravity="center_vertical" android:padding="2dp">
+        <TextView android:id="@+id/back" android:text="‹" android:textSize="27sp" android:gravity="center"
+            android:layout_width="32dp" android:layout_height="match_parent"/>
+        <TextView android:id="@+id/forward" android:text="›" android:textSize="27sp" android:gravity="center"
+            android:layout_width="32dp" android:layout_height="match_parent"/>
+        <TextView android:id="@+id/reload" android:text="↻" android:textSize="22sp" android:gravity="center"
+            android:layout_width="32dp" android:layout_height="match_parent"/>
+        <TextView android:id="@+id/searchEngine" android:text="G" android:textStyle="bold" android:textSize="15sp"
+            android:textColor="#1A73E8" android:gravity="center" android:background="#FFFDF3"
+            android:layout_width="38dp" android:layout_height="30dp" android:clickable="true" android:focusable="true"/>
+        <EditText android:id="@+id/url" android:layout_width="0dp" android:layout_height="34dp" android:layout_weight="1"
+            android:singleLine="true" android:textSize="13sp" android:paddingLeft="7dp" android:paddingRight="7dp"
+            android:background="#FFFDF3" android:hint="Address or search"/>
+        <ImageButton android:id="@+id/imageSearch" android:layout_width="34dp" android:layout_height="30dp" android:layout_marginLeft="2dp" android:background="#FFFDF3" android:src="@drawable/ic_image_search" android:contentDescription="Search by image" android:padding="6dp"/>
+        <ImageButton android:id="@+id/voiceSearch" android:layout_width="34dp" android:layout_height="30dp" android:layout_marginLeft="2dp" android:background="#FFFDF3" android:src="@drawable/ic_mic" android:contentDescription="Search by voice" android:padding="6dp"/>
+        <TextView android:id="@+id/go" android:text="→" android:textSize="22sp" android:gravity="center"
+            android:layout_width="36dp" android:layout_height="match_parent"/>
+    </LinearLayout>
+
+    <LinearLayout android:id="@+id/bottom" android:layout_width="match_parent" android:layout_height="34dp"
+        android:orientation="horizontal" android:background="#F1E3AA"/>
+</LinearLayout>
