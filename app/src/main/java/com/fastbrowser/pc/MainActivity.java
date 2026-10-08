@@ -443,7 +443,6 @@ public class MainActivity extends Activity {
                 hideFullscreenView();
             }
         });
-    }
 
     private void hideFullscreenView() {
         removeFullscreenExitButton();
@@ -598,51 +597,6 @@ public class MainActivity extends Activity {
         };
         handler.postDelayed(highTrafficMonitor, 500L);
 
-        w.setWebViewClient(new WebViewClient(){
-            @Override public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest r){
-                if(r==null || r.getUrl()==null) return false;
-                return handleNavigationRequest(v, r.getUrl(), r.isForMainFrame());
-            }
-            @Override public boolean shouldOverrideUrlLoading(WebView v, String url){
-                if(url==null || url.trim().isEmpty()) return false;
-                return handleNavigationRequest(v, android.net.Uri.parse(url), true);
-            }
-            @Override public void onLoadResource(WebView v, String u){ detector.inspect(u, v.getUrl(), "resource"); }
-            @Override public WebResourceResponse shouldInterceptRequest(WebView v, WebResourceRequest req){
-                String u=req==null||req.getUrl()==null?"":req.getUrl().toString();
-                if(adBlockEnabled && isBlockedAdUrl(u)) return emptyResponse();
-                detector.inspect(req, v.getUrl());
-                return super.shouldInterceptRequest(v, req);
-            }
-            @Override public WebResourceResponse shouldInterceptRequest(WebView v, String u){
-                if(adBlockEnabled && isBlockedAdUrl(u)) return emptyResponse();
-                detector.inspect(u, v.getUrl(), "network");
-                return super.shouldInterceptRequest(v, u);
-            }
-
-            @Override public void onPageStarted(WebView v,String u,android.graphics.Bitmap icon){
-                detector.clear();
-                startMediaScanner(v);
-                startHighTrafficMonitor(v);
-            }
-            @Override public void onPageFinished(WebView v,String u){
-                Tab t=null;
-                int finishedIndex=-1;
-                for(int i=0;i<tabs.size();i++){ if(tabs.get(i).web==v){ t=tabs.get(i); finishedIndex=i; break; } }
-                if(t==null) return;
-                t.lastUrl=u; t.title=v.getTitle()==null?"Tab":v.getTitle();
-                if(finishedIndex==currentTab) url.setText(u);
-                if(!incognitoMode) { prefs.edit().putString("last",u).apply(); addHistoryEntry(u, v.getTitle()); }
-                refreshTabs();
-                injectMediaScanner(v);
-                CookieManager.getInstance().flush();
-            }
-            @Override public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail){
-                int idx=-1; for(int i=0;i<tabs.size();i++) if(tabs.get(i).web==view){idx=i;break;}
-                if(idx>=0){tabs.remove(idx); if(tabs.isEmpty()) addTab("fastbrowser:home"); else switchTab(Math.min(currentTab,tabs.size()-1));}
-                return true;
-            }
-        });
         if (Build.VERSION.SDK_INT >= 24) {
             ServiceWorkerController.getInstance().setServiceWorkerClient(new ServiceWorkerClient(){
                 @Override public WebResourceResponse shouldInterceptRequest(WebResourceRequest request){
@@ -681,7 +635,8 @@ public class MainActivity extends Activity {
         String scheme=uri.getScheme();
         if(scheme==null) return false;
         if("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme)){
-            // WebView handles the navigation itself; never launch an external browser for web pages.
+            // HTTP/HTTPS navigation ALWAYS remains in this WebView. Do not create an
+            // ACTION_VIEW intent and do not hand the URL to another browser.
             return false;
         }
         final android.net.Uri externalUri=uri;
