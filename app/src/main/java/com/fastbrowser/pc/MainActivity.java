@@ -314,7 +314,7 @@ public class MainActivity extends Activity {
         s.setLoadWithOverviewMode(true);
         // Start each newly loaded page fitted to the available WebView width.
         // The user can still zoom/resize afterwards.
-        s.setInitialScale(0);
+        w.setInitialScale(0);
         s.setTextZoom(100);
         s.setDefaultFontSize(16);
         s.setDefaultFixedFontSize(13);
@@ -399,16 +399,23 @@ public class MainActivity extends Activity {
                 showFullscreenExitButton();
             }
             @Override public void onHideCustomView(){
-                removeFullscreenExitButton();
-                if(fullScreenView!=null){
-                    ViewParent parent=fullScreenView.getParent();
-                    if(parent instanceof ViewGroup)((ViewGroup)parent).removeView(fullScreenView);
-                    fullScreenView=null;
-                }
-                if(fullScreenCallback!=null){fullScreenCallback.onCustomViewHidden();fullScreenCallback=null;}
-                getWindow().getDecorView().setSystemUiVisibility(0);
+                hideFullscreenView();
             }
         });
+    }
+
+    private void hideFullscreenView() {
+        removeFullscreenExitButton();
+        if(fullScreenView!=null){
+            ViewParent parent=fullScreenView.getParent();
+            if(parent instanceof ViewGroup)((ViewGroup)parent).removeView(fullScreenView);
+            fullScreenView=null;
+        }
+        if(fullScreenCallback!=null){
+            fullScreenCallback.onCustomViewHidden();
+            fullScreenCallback=null;
+        }
+        getWindow().getDecorView().setSystemUiVisibility(0);
     }
 
     /** Adds a small, semi-transparent, draggable exit control over fullscreen media. */
@@ -458,8 +465,7 @@ public class MainActivity extends Activity {
                     case MotionEvent.ACTION_UP:
                     case MotionEvent.ACTION_CANCEL:
                         if(e.getActionMasked()==MotionEvent.ACTION_UP && !moved) {
-                            if(fullScreenCallback!=null) fullScreenCallback.onCustomViewHidden();
-                            onHideCustomView();
+                            hideFullscreenView();
                         }
                         return true;
                 }
@@ -1744,18 +1750,27 @@ public class MainActivity extends Activity {
                 return true;
             }
         }
-        if(type == WebView.HitTestResult.VIDEO_TYPE || type == WebView.HitTestResult.SRC_VIDEO_TYPE) {
-            if(isHttpUrl(extra)) {
-                detector.inspect(extra, page, "long-press");
-                showLongPressResourceMenu(w, extra, fileNameFor(extra, "video"), "video/*", ua, page, "Video");
-                return true;
-            }
+        if(isHttpUrl(extra) && looksLikeVideoUrl(extra)) {
+            detector.inspect(extra, page, "long-press");
+            showLongPressResourceMenu(w, extra, fileNameFor(extra, "video"), "video/*", ua, page, "Video");
+            return true;
         }
         if(isHttpUrl(extra) && looksDownloadable(extra)) {
             showLongPressResourceMenu(w, extra, fileNameFor(extra, "file"), null, ua, page, "File");
             return true;
         }
         return false;
+    }
+
+    private boolean looksLikeVideoUrl(String url){
+        if(url==null) return false;
+        String u=url.toLowerCase(Locale.US);
+        int q=u.indexOf('?');
+        if(q>=0) u=u.substring(0,q);
+        return u.endsWith(".mp4") || u.endsWith(".webm") || u.endsWith(".m4v") ||
+               u.endsWith(".mov") || u.endsWith(".mkv") || u.endsWith(".avi") ||
+               u.endsWith(".flv") || u.endsWith(".3gp") || u.endsWith(".ts") ||
+               u.endsWith(".m3u8") || u.endsWith(".mpd");
     }
 
     /**
