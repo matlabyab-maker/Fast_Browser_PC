@@ -1,7 +1,7 @@
 plugins { id 'com.android.application' }
 
 android { namespace 'com.fastbrowser.pc'; compileSdk 36
-    defaultConfig { applicationId 'com.fastbrowser.pc'; minSdk 23; targetSdk 35; versionCode 2; versionName '1.1' }
+    defaultConfig { applicationId 'com.fastbrowser.pc'; minSdk 24; targetSdk 35; versionCode 2; versionName '1.1' }
 }
 
 dependencies {
