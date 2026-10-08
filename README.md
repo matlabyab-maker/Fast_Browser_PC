@@ -152,3 +152,12 @@ All browser notification/warning/status messages shown as Toast messages are now
 The repository includes `.github/workflows/android.yml` for automatic Android builds.
 It runs on pushes to `main`/`master`, pull requests targeting those branches, and can also be started manually from GitHub Actions with **Run workflow**.
 The workflow uses JDK 17, Android SDK API 35, Gradle 8.7, and uploads the installable debug APK as the `Fast_Browser_PC-debug` artifact.
+
+
+## GitHub Actions build configuration
+- Android Gradle Plugin: 8.13.0
+- Gradle: 8.13
+- compileSdk: 36
+- JDK: 17
+- Media3: 1.11.0
+- The configuration is aligned with Media3 1.11.0's requirement to compile against Android API 36 or later.
