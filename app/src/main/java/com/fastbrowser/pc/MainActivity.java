@@ -549,7 +549,6 @@ public class MainActivity extends Activity {
             }
         };
         handler.postDelayed(highTrafficMonitor, 500L);
-    }
 
         w.setWebViewClient(new WebViewClient(){
             @Override public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest r){ return false; }
