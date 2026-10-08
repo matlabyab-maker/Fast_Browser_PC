@@ -146,3 +146,9 @@ The Tool menu now contains a Widgets manager. It stores several widget-provider 
 
 ### Temporary messages
 All browser notification/warning/status messages shown as Toast messages are now automatically hidden after 4 seconds. Interactive dialogs that require a user action (such as OK/Cancel or text entry) remain available until the user closes or completes them.
+
+## GitHub Actions Android Build
+
+The repository includes `.github/workflows/android.yml` for automatic Android builds.
+It runs on pushes to `main`/`master`, pull requests targeting those branches, and can also be started manually from GitHub Actions with **Run workflow**.
+The workflow uses JDK 17, Android SDK API 35, Gradle 8.7, and uploads the installable debug APK as the `Fast_Browser_PC-debug` artifact.
